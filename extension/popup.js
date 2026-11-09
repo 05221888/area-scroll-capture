@@ -46,6 +46,67 @@ document.querySelectorAll('input[name=rng]').forEach(r => {
 });
 
 
+
+/* ---------------- ★ 设置持久化 ----------------
+   用户要求：这次选了什么，下次点开还是什么。
+   所有可配置项都存 chrome.storage.local，popup 一打开就恢复。
+   用 local 而不是 sync：sync 有配额且会跨设备串味，这些是本地偏好。 */
+const SETTINGS_KEY = 'ascSettings';
+const SETTING_FIELDS = ['overlap', 'delay', 'format', 'saveAs', 'editorOn', 'copyClip', 'rangeMode', 'fromY', 'toY'];
+
+function collectSettings() {
+  return {
+    overlap: $('overlap').value,
+    delay: $('delay').value,
+    format: $('format').value,
+    saveAs: $('saveAs').checked,
+    editorOn: $('editorOn').checked,
+    copyClip: $('copyClip').checked,
+    rangeMode: rangeMode(),
+    fromY: $('fromY').value,
+    toY: $('toY').value,
+  };
+}
+
+let saveTimer = null;
+function saveSettings() {
+  clearTimeout(saveTimer);
+  // 轻微去抖：拖滑杆时避免每像素都写一次磁盘
+  saveTimer = setTimeout(() => {
+    try { chrome.storage.local.set({ [SETTINGS_KEY]: collectSettings() }); } catch (_) {}
+  }, 120);
+}
+
+async function restoreSettings() {
+  let s = null;
+  try { s = (await chrome.storage.local.get(SETTINGS_KEY))[SETTINGS_KEY]; } catch (_) {}
+  if (!s) return;
+  if (s.overlap != null) $('overlap').value = s.overlap;
+  if (s.delay != null) $('delay').value = s.delay;
+  if (s.format != null) $('format').value = s.format;
+  if (typeof s.saveAs === 'boolean') $('saveAs').checked = s.saveAs;
+  if (typeof s.editorOn === 'boolean') $('editorOn').checked = s.editorOn;
+  if (typeof s.copyClip === 'boolean') $('copyClip').checked = s.copyClip;
+  if (typeof s.fromY === 'string') $('fromY').value = s.fromY;
+  if (typeof s.toY === 'string') $('toY').value = s.toY;
+  if (s.rangeMode) {
+    const r = document.querySelector(`input[name=rng][value="${s.rangeMode}"]`);
+    if (r) r.checked = true;
+  }
+  // 恢复后要把滑杆填充、范围区显隐、数值标签都刷一遍
+  syncOverlap(); syncDelay();
+}
+
+// 把所有控件的变化都接到 saveSettings
+function bindSettingListeners() {
+  ['overlap', 'delay'].forEach(id => $(id).addEventListener('input', saveSettings));
+  ['format', 'saveAs', 'editorOn', 'copyClip', 'fromY', 'toY'].forEach(id => {
+    $(id).addEventListener('change', saveSettings);
+    $(id).addEventListener('input', saveSettings);
+  });
+  document.querySelectorAll('input[name=rng]').forEach(r => r.addEventListener('change', saveSettings));
+}
+
 // 「取当前」：读目标页当前滚动位置填入起始
 $('fillPos').onclick = async () => {
   try {
@@ -200,3 +261,10 @@ $('redo').onclick = async () => {
     showResult({ ok: false, error: String(e && e.message || e) });
   }
 };
+
+/* ---------------- 启动：恢复上次设置并开始监听 ---------------- */
+(async () => {
+  await restoreSettings();
+  bindSettingListeners();
+  refreshRange();
+})();

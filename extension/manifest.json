@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "长截图 · 全屏 / 区域二合一",
-  "version": "2.9.0",
+  "version": "2.10.0",
   "description": "长截图：全屏/区域共用一套设置，支持从头到尾、从当前可见处、自定义范围，自动复制剪贴板，内置编辑器。",
   "permissions": [
     "tabs",
