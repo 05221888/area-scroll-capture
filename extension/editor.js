@@ -103,6 +103,8 @@ function render() {
 
   if (drawing) drawAnno(drawing, true, ctx);
 
+  drawTextSelection(ctx);
+
   // 裁剪态：画暗区
   if (tool === 'crop' && crop) syncCropUI();
 }
@@ -192,6 +194,50 @@ function drawArrow(x1, y1, x2, y2, w) {
   ctx.fill();
 }
 
+/* ---------------- 文字：包围盒 / 命中 / 选中 ---------------- */
+let selText = null;       // 当前选中的文字标注
+
+function textMetrics(a) {
+  const fs = a.size;
+  ctx.save();
+  ctx.font = `600 ${fs}px -apple-system,"PingFang SC",sans-serif`;
+  const w = ctx.measureText(a.text).width;
+  ctx.restore();
+  return { w, h: fs * 1.25 };
+}
+
+function textBounds(a) {
+  const m = textMetrics(a);
+  return { x: a.x, y: a.y, w: m.w, h: m.h };
+}
+
+// 从后往前找（后画的在上面），留 6px 容错方便点中
+function hitText(p, pad) {
+  const tol = (pad == null ? 6 : pad) / viewScale;
+  for (let i = annos.length - 1; i >= 0; i--) {
+    const a = annos[i];
+    if (a.type !== 'text') continue;
+    const b = textBounds(a);
+    if (p.x >= b.x - tol && p.x <= b.x + b.w + tol &&
+        p.y >= b.y - tol && p.y <= b.y + b.h + tol) return a;
+  }
+  return null;
+}
+
+// 选中态用虚线框标出来
+function drawTextSelection(g) {
+  if (!selText) return;
+  const b = textBounds(selText);
+  const d = 3 / viewScale;
+  g.save();
+  g.strokeStyle = '#2563eb';
+  g.lineWidth = 1.5;
+  g.setLineDash([5, 4]);
+  g.strokeRect(b.x - d, b.y - d, b.w + d * 2, b.h + d * 2);
+  g.setLineDash([]);
+  g.restore();
+}
+
 /* ---------------- 坐标换算 ---------------- */
 function toCanvas(e) {
   const r = cv.getBoundingClientRect();
@@ -205,10 +251,22 @@ let drawing = null, dragStart = null;
 
 cv.addEventListener('pointerdown', e => {
   if (!baseCanvas) return;
-  cv.setPointerCapture(e.pointerId);
+  try { cv.setPointerCapture(e.pointerId); } catch (_) {}   // 合成事件/异常 pointerId 不应中断后续逻辑
   const p = toCanvas(e);
 
-  if (tool === 'select') { dragStart = p; return; }
+  if (tool === 'select') {
+    // ★ 点中已有文字 → 打开属性面板改内容/大小/颜色
+    const hit = hitText(p);
+    if (hit) {
+      e.preventDefault();
+      openTextPanel(hit);
+      dragStart = null;
+      return;
+    }
+    closeTextPanelIfOpen();
+    dragStart = p;
+    return;
+  }
 
   if (tool === 'crop') {
     if (crop) { dragStart = { ...p, mode: hitCrop(p) }; }
@@ -217,11 +275,19 @@ cv.addEventListener('pointerdown', e => {
   }
 
   if (tool === 'text') {
-    const t = prompt('输入文字：');
-    if (t && t.trim()) {
-      annos.push({ type: 'text', x: p.x, y: p.y, text: t.trim(), color, size: Math.max(18, Math.round(lineW * 4.5)) });
-      redoStack = []; render(); syncUndo();
-    }
+    // 点已有文字 → 编辑它；点空白 → 新建
+    const hit = hitText(p);
+    if (hit) { e.preventDefault(); openTextPanel(hit); return; }
+    const a = {
+      type: 'text', x: p.x, y: p.y, text: '双击修改',
+      color, size: Math.max(20, Math.round(lineW * 4.5)),
+    };
+    annos.push(a);
+    redoStack = [];
+    render(); syncUndo();
+    // 直接进入面板，光标已选中占位文字，输入即替换
+    openTextPanel(a);
+    $('txText').select();
     return;
   }
 
@@ -332,6 +398,19 @@ function clampCrop() {
   crop.y = Math.max(0, Math.min(crop.y, cv.height - crop.h));
 }
 
+// 裁剪初始框：不要占满整图（长图上会是个巨大的框，反而不好调），
+// 给一个居中的中等尺寸，用户拖边框/四角自行扩大缩小。
+function defaultCrop() {
+  const cw = Math.min(cv.width * 0.6, 1200);
+  const ch = Math.min(cv.height * 0.35, 900);
+  return {
+    x: Math.round((cv.width - cw) / 2),
+    y: Math.round((cv.height - ch) / 2),
+    w: Math.round(cw),
+    h: Math.round(ch),
+  };
+}
+
 function syncCropUI() {
   const mask = $('cropMask');
   if (tool !== 'crop' || !crop) { mask.classList.remove('on'); return; }
@@ -348,20 +427,65 @@ function syncCropUI() {
   $('shR').style.cssText = `left:${x + w}px;top:${y}px;width:${Math.max(0, W - x - w)}px;height:${h}px`;
 }
 
+
+/* ---------------- 工具悬浮提示 ---------------- */
+// 悬停 450ms 才显示（避免扫过一排工具时就乱弹），移开立即隐藏。
+// 用自定义 tooltip 而不是 title：原生 title 要 1 秒以上、样式不可控、且无法放快捷键。
+const TIP = $('tip');
+let tipTimer = null, tipOn = null;
+
+function showTip(btn) {
+  const name = btn.dataset.tip;
+  const desc = btn.dataset.desc || '';
+  if (!name) return;
+  TIP.innerHTML = `<b>${name}</b>${desc}`;
+  TIP.classList.add('on');
+  tipOn = btn;
+  const r = btn.getBoundingClientRect();
+  // 先定 left，量到实际高度后再垂直居中（否则用旧高度会偏）
+  TIP.style.left = (r.right + 12) + 'px';
+  TIP.style.top = '0px';
+  const th = TIP.offsetHeight;
+  let top = r.top + r.height / 2 - th / 2;
+  top = Math.max(8, Math.min(window.innerHeight - th - 8, top));
+  TIP.style.top = top + 'px';
+}
+
+function hideTip() {
+  clearTimeout(tipTimer);
+  tipTimer = null;
+  TIP.classList.remove('on');
+  tipOn = null;
+}
+
+document.querySelectorAll('#tools .tool, #opts .tool').forEach(btn => {
+  btn.addEventListener('mouseenter', () => {
+    hideTip();
+    tipTimer = setTimeout(() => showTip(btn), 450);
+  });
+  btn.addEventListener('mouseleave', hideTip);
+  btn.addEventListener('mousedown', hideTip);   // 点了就收起
+});
+
+// 滚动/缩放时提示位置会失效，直接收起
+$('stage').addEventListener('scroll', hideTip, true);
+window.addEventListener('resize', hideTip);
+
 /* ---------------- 工具切换 ---------------- */
 document.querySelectorAll('#tools .tool').forEach(b => {
   b.onclick = () => setTool(b.dataset.t);
 });
 
 function setTool(t) {
+  closeTextPanelIfOpen();
   tool = t;
   document.querySelectorAll('#tools .tool').forEach(b => b.classList.toggle('on', b.dataset.t === t));
   const needOpts = ['rect', 'arrow', 'text'].includes(t);
   $('opts').classList.toggle('show', needOpts);
   $('wrap').className = t === 'select' ? 'cursor-default' : (t === 'crop' ? 'cursor-move' : '');
   if (t !== 'crop') { $('cropMask').classList.remove('on'); }
-  else if (!crop) { crop = { x: cv.width * .1, y: cv.height * .1, w: cv.width * .8, h: cv.height * .8 }; }
-  if (t === 'crop') syncCropUI();
+  else if (!crop) { crop = defaultCrop(); }
+  if (t === 'crop') { syncCropUI(); msg('拖动边框或四角调整范围，拖框内可移动'); }
   render();
 }
 
@@ -410,6 +534,103 @@ $('fillToggle').onclick = () => {
   $('fillToggle').style.background = filled ? 'var(--brand-weak)' : '';
   $('fillToggle').style.color = filled ? 'var(--brand)' : '';
 };
+
+/* ---------------- 文字属性面板 ---------------- */
+const TPC = $('txPanel');
+
+function openTextPanel(a) {
+  selText = a;
+  $('txText').value = a.text;
+  $('txSize').value = Math.round(a.size);
+  $('txSizeV').textContent = Math.round(a.size);
+  paintTxColors(a.color);
+  TPC.classList.add('on');
+  // 定位：优先放在文字右侧，放不下就放左侧，再不行才放下方 —— 始终避开文字本体
+  const r = cv.getBoundingClientRect();
+  const kx = r.width / cv.width, ky = r.height / cv.height;
+  const bx = r.left + a.x * kx;
+  const by = r.top + a.y * ky;
+  const bw = textBounds(a).w * kx;
+  const bh = textBounds(a).h * ky;
+  const pw = 238, ph = TPC.offsetHeight || 236, gap = 14;
+
+  let left = bx + bw + gap;                       // 右侧
+  if (left + pw > window.innerWidth - 8) left = bx - pw - gap;   // 右侧放不下 → 左侧
+  left = Math.max(8, Math.min(window.innerWidth - pw - 8, left));
+
+  let top = by + bh / 2 - ph / 2;                 // 与文字垂直居中
+  if (left === Math.max(8, Math.min(window.innerWidth - pw - 8, bx + bw + gap)) &&
+      top + ph > window.innerHeight - 8) {
+    // 右侧且底部溢出 → 上方对齐
+    top = by - ph - gap;
+  }
+  top = Math.max(8, Math.min(window.innerHeight - ph - 8, top));
+
+  TPC.style.left = left + 'px';
+  TPC.style.top = top + 'px';
+  $('txText').focus();
+  $('txText').select();
+  render();
+}
+
+function closeTextPanelIfOpen() {
+  if (TPC && TPC.classList.contains('on')) closeTextPanel();
+}
+
+function closeTextPanel() {
+  TPC.classList.remove('on');
+  selText = null;
+  render();
+}
+
+function paintTxColors(cur) {
+  const box = $('txColors');
+  box.innerHTML = '';
+  ['#e11d48','#dc2626','#f59e0b','#059669','#2563eb','#7c3aed','#111827','#ffffff'].forEach(c => {
+    const i = document.createElement('i');
+    i.style.background = c;
+    if (c === cur) i.classList.add('on');
+    i.onclick = () => {
+      if (!selText) return;
+      selText.color = c;
+      paintTxColors(c);
+      render();
+    };
+    box.appendChild(i);
+  });
+}
+
+$('txText').addEventListener('input', () => {
+  if (!selText) return;
+  selText.text = $('txText').value || ' ';
+  render();
+});
+
+$('txSize').addEventListener('input', () => {
+  const v = +$('txSize').value;
+  $('txSizeV').textContent = v;
+  if (!selText) return;
+  selText.size = v;
+  render();
+});
+
+$('txDel').onclick = () => {
+  if (!selText) return;
+  annos = annos.filter(x => x !== selText);
+  redoStack = [];
+  closeTextPanel();
+  syncUndo();
+};
+
+$('txClose').onclick = closeTextPanel;
+
+// 点画布空白处 / 切工具时收起面板
+document.addEventListener('pointerdown', e => {
+  if (!TPC.classList.contains('on')) return;
+  if (TPC.contains(e.target)) return;
+  if (e.target === cv) return;      // 画布上的点击由主逻辑处理
+  closeTextPanel();
+}, true);
 
 /* ---------------- 撤销 / 重做 / 原图 ---------------- */
 function syncUndo() {

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "长截图 · 全屏 / 区域二合一",
-  "version": "2.5.0",
+  "version": "2.6.0",
   "description": "长截图：全屏 / 区域二合一，截完可直接裁剪、画框、箭头、文字、马赛克，再导出。",
   "permissions": [
     "tabs",
