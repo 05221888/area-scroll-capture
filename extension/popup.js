@@ -2,8 +2,6 @@
 // 为什么不在 popup 里截：popup 关掉就消失，长图要十几秒；且它会抢走 active 标签。
 const $ = id => document.getElementById(id);
 const show = (id, on) => $(id).classList.toggle('hidden', !on);
-// 当前悬停/将要用的方式：'full' | 'region'（决定范围文案）
-let hoverMode = 'full';
 
 function rangeMode() {
   const r = document.querySelector('input[name=rng]:checked');
@@ -19,8 +17,10 @@ function opts() {
     editor: $('editorOn').checked,
     copy: $('copyClip').checked,
   };
-  // 截取范围：只有自定义模式才传 from/to
-  if (rangeMode() === 'custom') {
+  // 截取范围：custom 直接带 from/to；view 由调用方读位置后补；all 不带（=从头到尾）
+  const rm = rangeMode();
+  o.rangeMode = rm;
+  if (rm === 'custom') {
     const f = $('fromY').value.trim(), t = $('toY').value.trim();
     if (f !== '') o.from = Math.max(0, +f);
     if (t !== '') o.to = Math.max(0, +t);
@@ -32,27 +32,19 @@ function opts() {
 function refreshRange() {
   const m = rangeMode();
   $('customWrap').classList.toggle('hidden', m !== 'custom');
-  const hint = m === 'all' ? '全部' : (m === 'view' ? '从当前位置到底' : '自定义区间');
+  const hint = m === 'all' ? '从头到尾' : (m === 'view' ? '从当前位置到底' : '自定义区间');
   $('rangeHint').textContent = hint;
 
   // 区域模式也支持范围（作用于小窗口内部）；文案随之变
   const choosing = !$('choose').classList.contains('hidden');   // 还在选方式 = 尚未进入框选
   $('rangeBox').classList.toggle('hidden', !choosing);
-  const isRegion = hoverMode === 'region';
-  $('rangeTitle').textContent = isRegion ? '截取范围（小窗口内部）' : '截取范围';
-  $('labAll').textContent = isRegion ? '整个小窗口' : '整页';
-  $('labView').textContent = isRegion ? '从当前可见处' : '从当前可见处';
-  $('fillPos').textContent = isRegion ? '取当前' : '取当前';
+  // 统一文案：两种模式共用同一套设置，不因模式变化
+  // （全屏：页面的滚动位置；区域：被选中小窗口内部的滚动位置）
 }
 document.querySelectorAll('input[name=rng]').forEach(r => {
   r.onchange = refreshRange;
 });
 
-// 鼠标移到哪张卡，范围文案就切到对应模式
-$('cardFull').addEventListener('mouseenter', () => { hoverMode = 'full'; refreshRange(); });
-$('cardRegion').addEventListener('mouseenter', () => { hoverMode = 'region'; refreshRange(); });
-$('cardFull').addEventListener('focus', () => { hoverMode = 'full'; refreshRange(); });
-$('cardRegion').addEventListener('focus', () => { hoverMode = 'region'; refreshRange(); });
 
 // 「取当前」：读目标页当前滚动位置填入起始
 $('fillPos').onclick = async () => {
@@ -145,15 +137,12 @@ $('cardRegion').onclick = async () => {
     //   所以「从当前可见处」只能等框选完成后由 content 侧读 scrollTop。
     //   这里先把 UI 选择带给 content，让它点选时一并记录。
     let r = null, err = null;
-    const rng = { mode: rangeMode() };
-    if (rangeMode() === 'custom') {
-      const f = $('fromY').value.trim(), t = $('toY').value.trim();
-      if (f !== '') rng.from = Math.max(0, +f);
-      if (t !== '') rng.to = Math.max(0, +t);
-    }
+    // ★ 设置只算一次（opts 里已含 rangeMode 与 custom 的 from/to），两种模式共用
+    const o = opts();
     // 先把当前设置存进 session，框选完成后 background 会合并使用
-    await chrome.runtime.sendMessage({ type: 'ASC_SAVE_OPTIONS', options: opts() });
-    try { r = await chrome.tabs.sendMessage(tab.id, { type: 'ASC_BEGIN_PICK', range: rng }); }
+    await chrome.runtime.sendMessage({ type: 'ASC_SAVE_OPTIONS', options: o });
+    // 框选时把范围选择带给 content（view 模式的 from 要等点选后才能读小窗口 scrollTop）
+    try { r = await chrome.tabs.sendMessage(tab.id, { type: 'ASC_BEGIN_PICK', range: { mode: o.rangeMode, from: o.from, to: o.to } }); }
     catch (e) { err = e && e.message || String(e); }
     if (!r || !r.ok) {
       throw new Error('页面没响应框选指令（' + (err || '可能需刷新页面') + '）');
@@ -181,12 +170,30 @@ $('cardRegion').onclick = async () => {
 $('redo').onclick = async () => {
   const st = await chrome.storage.session.get('ascPicked');
   try {
+    const o = opts();   // 两种模式共用同一套设置（含范围）
     if (st.ascPicked) {
-      await chrome.runtime.sendMessage({ type: 'ASC_START', options: opts() });
+      // 区域重截：view 模式要用小窗口「当前」位置，交给 content 现读
+      if (o.rangeMode === 'view') {
+        const pos = await chrome.tabs.sendMessage(st.ascPicked.tabId, { type: 'ASC_POS_REGION' })
+          .catch(() => null);
+        if (pos && pos.ok) {
+          if (pos.maxTop - pos.scrollTop < 40) throw new Error('小窗口已在最底部，没有可截内容');
+          o.from = pos.scrollTop;
+        }
+      }
+      await chrome.runtime.sendMessage({ type: 'ASC_SAVE_OPTIONS', options: o });
+      await chrome.runtime.sendMessage({ type: 'ASC_START', options: o });
     } else {
       const tab = await targetTab();
       if (!tab) throw new Error('找不到可截图的网页标签');
-      await chrome.runtime.sendMessage({ type: 'ASC_FULL_START', tabId: tab.id, options: opts() });
+      if (o.rangeMode === 'view') {
+        const pos = await chrome.tabs.sendMessage(tab.id, { type: 'ASC_POS_FULL' }).catch(() => null);
+        if (pos && pos.ok) {
+          if (pos.maxTop - pos.scrollY < 40) throw new Error('已经在页面最底部，没有可截内容');
+          o.from = pos.scrollY;
+        }
+      }
+      await chrome.runtime.sendMessage({ type: 'ASC_FULL_START', tabId: tab.id, options: o });
     }
     window.close();
   } catch (e) {
