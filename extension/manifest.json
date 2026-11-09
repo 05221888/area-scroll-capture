@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "长截图 · 全屏 / 区域二合一",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "description": "点图标选「全屏长截图」或「区域截图」；无边框接缝、sticky 标题栏只出现一次，秒级出图。",
   "permissions": [
     "tabs",

@@ -25,7 +25,8 @@ function setProg(done, total, text) {
   $s.textContent = text || (total ? `第 ${done} / ${total} 帧` : '准备中…');
 }
 function fail(msg) {
-  $t.textContent = '❌ 截图失败';
+  document.body.className = 'bad';
+  $t.textContent = '截图失败';
   $e.style.display = 'block';
   $e.textContent = msg;
   $s.textContent = '窗口将在 8 秒后关闭';
@@ -85,6 +86,7 @@ async function captureOnce(windowId) {
     for (let t = 0; t < maxScroll; t += stride) tops.push(t);
     if (tops.length === 0 || tops[tops.length - 1] !== maxScroll) tops.push(maxScroll);
 
+    document.body.className = 'busy';
     $t.textContent = MODE === 'full' ? '正在截整个网页…' : '正在截小窗口…';
     setProg(0, tops.length);
 
@@ -157,9 +159,11 @@ async function captureOnce(windowId) {
     await chrome.downloads.download({ url, filename, saveAs: SAVE_AS, conflictAction: 'uniquify' });
     setTimeout(() => { try { URL.revokeObjectURL(url); } catch (_) {} }, 60000);
 
-    $t.textContent = '✅ 已保存';
-    $s.textContent = `${filename} · ${W}×${H} · ${(blob.size / 1024 / 1024).toFixed(2)} MB`;
-    setTimeout(() => window.close(), 1500);
+    document.body.className = 'ok';
+    $t.textContent = '已保存';
+    $barI.style.width = '100%';
+    $s.textContent = `${W}×${H} · ${(blob.size / 1024 / 1024).toFixed(2)} MB · ${filename}`;
+    setTimeout(() => window.close(), 1600);
   } catch (err) {
     fail(String(err && err.message || err));
   }

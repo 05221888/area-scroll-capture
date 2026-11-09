@@ -12,8 +12,19 @@ function opts() {
   };
 }
 
-$('overlap').oninput = e => $('overlapV').textContent = e.target.value + 'px';
-$('delay').oninput = e => $('delayV').textContent = e.target.value + 'ms';
+/** 给 range 画「已填充」渐变（Chrome 不自动填） */
+function paintRange(el) {
+  const min = +el.min || 0, max = +el.max || 100, v = +el.value;
+  const pct = max > min ? ((v - min) / (max - min)) * 100 : 0;
+  el.style.background =
+    `linear-gradient(to right, var(--brand) 0%, var(--brand) ${pct}%, var(--line) ${pct}%, var(--line) 100%)`;
+}
+const syncOverlap = () => { $('overlapV').textContent = $('overlap').value + 'px'; paintRange($('overlap')); };
+const syncDelay   = () => { $('delayV').textContent   = $('delay').value   + 'ms'; paintRange($('delay')); };
+
+$('overlap').oninput = syncOverlap;
+$('delay').oninput = syncDelay;
+syncOverlap(); syncDelay();
 
 function showResult(r) {
   const el = $('res');
