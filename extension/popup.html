@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin:0; width:340px; font:13px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; color:#202124; }
+  .hd { padding:12px 14px; background:#1b6fe0; color:#fff; font-size:14px; font-weight:600; }
+  .hd small { display:block; font-weight:400; opacity:.85; font-size:11px; margin-top:2px; }
+  .bd { padding:12px 14px; }
+  .choose { display:flex; gap:10px; }
+  .card { flex:1; padding:14px 10px; border:2px solid #e8eaed; border-radius:10px; background:#fff;
+          cursor:pointer; text-align:center; transition:.15s; user-select:none; }
+  .card:hover { border-color:#1b6fe0; background:#f6f9ff; }
+  .card .ico { font-size:26px; line-height:1.2; }
+  .card .ttl { font-weight:600; margin-top:6px; font-size:13px; }
+  .card .sub { color:#5f6368; font-size:11px; margin-top:4px; line-height:1.4; }
+  .tip { margin:10px 0 12px; color:#5f6368; font-size:12px; }
+  .info { display:none; margin:10px 0; padding:9px 10px; background:#e8f0fe; border-radius:6px;
+          font-size:12px; word-break:break-all; }
+  .info b { color:#1b6fe0; }
+  .row { display:flex; align-items:center; gap:8px; margin:7px 0; font-size:12px; }
+  .row label { width:70px; color:#5f6368; flex:none; }
+  .row input[type=range], .row select { flex:1; }
+  .row span { width:48px; text-align:right; color:#202124; }
+  .row.chk label { width:auto; }
+  .res { display:none; margin-top:10px; padding:9px 10px; border-radius:6px; font-size:12px; word-break:break-all; }
+  .res.err { background:#fce8e6; color:#c5221f; }
+  .btn { width:100%; padding:9px; border:0; border-radius:6px; font-size:13px; font-weight:600;
+         cursor:pointer; background:#f1f3f4; color:#202124; margin-top:8px; }
+  hr { border:0; border-top:1px solid #e8eaed; margin:12px 0; }
+  .foot { font-size:11px; color:#9aa0a6; }
+  .hidden { display:none !important; }
+</style>
+</head>
+<body>
+  <div class="hd">长截图 · 选择方式
+    <small>点一下会弹出一个进度小窗，截完自动下载</small>
+  </div>
+  <div class="bd">
+    <div id="choose" class="choose">
+      <div id="cardFull" class="card">
+        <div class="ico">🖥️</div>
+        <div class="ttl">全屏长截图</div>
+        <div class="sub">整个网页从上到下<br>替代 GoFullPage</div>
+      </div>
+      <div id="cardRegion" class="card">
+        <div class="ico">🔲</div>
+        <div class="ttl">区域截图</div>
+        <div class="sub">只截大页面里<br>那个可滚动小窗口</div>
+      </div>
+    </div>
+    <div id="stepPick" class="tip hidden">去页面点一下想截的小窗口，按 <b>Esc</b> 取消框选。</div>
+    <div id="info" class="info"></div>
+
+    <hr>
+    <div class="row"><label>帧间重叠</label><input id="overlap" type="range" min="0" max="200" step="2" value="16"><span id="overlapV">16px</span></div>
+    <div class="row"><label>渲染等待</label><input id="delay" type="range" min="60" max="1200" step="30" value="120"><span id="delayV">120ms</span></div>
+    <div class="row"><label>格式</label><select id="format"><option value="png">PNG（无损）</option><option value="jpeg">JPG（质量 92%，体积小）</option></select></div>
+    <div class="row chk"><label><input id="saveAs" type="checkbox"> 每次询问保存位置</label></div>
+
+    <button id="redo" class="btn hidden">用当前设置重新截一次</button>
+    <div id="res" class="res"></div>
+    <hr>
+    <div class="foot">截图在独立进度窗里完成；采集期间请勿切换标签页。</div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>

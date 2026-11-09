@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "长截图 · 全屏 / 区域二合一",
+  "version": "2.3.0",
+  "description": "点图标选「全屏长截图」或「区域截图」；无边框接缝、sticky 标题栏只出现一次，秒级出图。",
+  "permissions": [
+    "tabs",
+    "scripting",
+    "downloads",
+    "storage"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "action": {
+    "default_title": "长截图（全屏 / 区域）",
+    "default_popup": "popup.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "icons": {
+    "16": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  }
+}

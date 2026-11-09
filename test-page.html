@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>区域滚动截图 · 验收页</title>
+<style>
+  body { margin:0; font:14px/1.5 -apple-system,"PingFang SC",sans-serif; background:#eceff1; color:#263238; }
+  header { background:#1565c0; color:#fff; padding:14px 22px; font-size:17px; font-weight:600; }
+  .wrap { max-width:1100px; margin:22px auto; padding:0 20px; }
+  .desc { background:#fff; padding:14px 18px; border-radius:8px; margin-bottom:16px; box-shadow:0 1px 3px rgba(0,0,0,.12); }
+  .layout { display:flex; gap:18px; }
+  .side { width:260px; flex:none; background:#fff; border-radius:8px; padding:16px; box-shadow:0 1px 3px rgba(0,0,0,.12); height:420px; }
+  .side h3 { margin:0 0 10px; font-size:15px; }
+  .side p { color:#546e7a; font-size:13px; }
+  /* ★ 这个就是要截的「大屏幕里的小窗口」 */
+  #panel {
+    flex:1; height:420px; overflow-y:auto; background:#fff; border-radius:8px;
+    border:2px solid #1565c0; box-shadow:0 1px 3px rgba(0,0,0,.12);
+    padding:0 18px; scroll-behavior:auto;
+  }
+  #panel .sticky { position:sticky; top:0; background:#fff8e1; padding:10px 0; font-weight:600;
+                   border-bottom:1px solid #ffe082; z-index:2; }
+  .row { padding:13px 8px; border-bottom:1px solid #eceff1; display:flex; align-items:center; gap:12px; }
+  .row:nth-child(odd) { background:#f7f9fc; }
+  .num { width:34px; height:34px; flex:none; border-radius:50%; background:#1565c0; color:#fff;
+         display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px; }
+  .txt b { display:block; }
+  .txt small { color:#78909c; }
+  .foot { margin-top:16px; color:#78909c; font-size:12px; }
+</style></head>
+<body>
+<header>区域滚动截图 · 验收页（大页面里的小窗口）</header>
+<div class="wrap">
+  <div class="desc">
+    <b>验收目标：</b>右侧蓝色边框的小窗口 <code>#panel</code> 有 60 行内容、可独立滚动；
+    整张长图应该<b>只有这个小窗口的内容</b>，不含左边栏、页头和大页面背景。
+    逐行核对编号 1→60 是否连续、无重复、无缺失、底部不截断。
+  </div>
+  <div class="layout">
+    <div class="side">
+      <h3>左侧栏（不该出现在长图里）</h3>
+      <p>这是大页面的固定侧栏。如果长图里出现这段文字、页头或灰色背景，说明裁剪区域错了。</p>
+      <p>GoFullPage 会把整个大页面都截进来；本扩展只截你点中的那个小窗口。</p>
+    </div>
+    <div id="panel"><div class="sticky">小窗口标题栏 · 60 行可滚动内容（sticky）</div><div id="rows"></div></div>
+  </div>
+  <div class="foot">测试页 · 仅供本扩展验收使用</div>
+</div>
+<script>
+  const rows = document.getElementById('rows');
+  let h = '';
+  for (let i = 1; i <= 60; i++) {
+    h += `<div class="row"><div class="num">${i}</div><div class="txt"><b>第 ${i} 行内容</b>` +
+         `<small>用于核对拼接：编号 ${i} 必须出现且只出现一次</small></div></div>`;
+  }
+  rows.innerHTML = h;
+  window.__TEST_INFO__ = { rows: 60, panel: document.getElementById('panel').scrollHeight };
+</script>
+</body></html>
