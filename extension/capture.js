@@ -13,6 +13,7 @@ const OVERLAP = q.has('overlap') ? Number(q.get('overlap')) : 16;
 const DELAY = q.has('delay') ? Number(q.get('delay')) : 120;
 const FORMAT = q.get('format') === 'jpeg' ? 'jpeg' : 'png';
 const SAVE_AS = q.get('saveAs') === '1';
+const OPEN_EDITOR = q.get('editor') !== '0';   // 默认截完进编辑器
 
 const $t = document.getElementById('t');
 const $barI = document.querySelector('#bar > i');
@@ -154,6 +155,33 @@ async function captureOnce(windowId) {
     const d = new Date(), p = n => String(n).padStart(2, '0');
     const stamp = `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
     const filename = `${prefix}-${stamp}.${FORMAT === 'jpeg' ? 'jpg' : 'png'}`;
+
+    // ★ 先把图存进 IndexedDB（扩展页同源），编辑器据此打开；
+    //   不开编辑器时退回老行为：直接下载。
+    let key = null;
+    try {
+      await ascSweep();
+      key = await ascPut(blob, { filename, w: W, h: H, mode: MODE });
+    } catch (_) { key = null; }
+
+    if (OPEN_EDITOR && key) {
+      // 交接给编辑器：本窗口 380×200 太小，交给 SW 开一个够大的窗口
+      document.body.className = 'ok';
+      $t.textContent = '已生成';
+      $barI.style.width = '100%';
+      $s.textContent = `${W}×${H} · ${(blob.size / 1024 / 1024).toFixed(2)} MB · 正在打开编辑器…`;
+      try {
+        await chrome.runtime.sendMessage({
+          type: 'ASC_EDIT', key,
+          options: { format: FORMAT, saveAs: SAVE_AS },
+        });
+        setTimeout(() => window.close(), 260);
+        return;
+      } catch (e) {
+        // SW 不可用就退回直接下载，别让用户白等
+        console.warn('打开编辑器失败，改为直接下载', e);
+      }
+    }
 
     const url = URL.createObjectURL(blob);
     await chrome.downloads.download({ url, filename, saveAs: SAVE_AS, conflictAction: 'uniquify' });

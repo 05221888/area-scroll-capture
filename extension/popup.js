@@ -9,6 +9,7 @@ function opts() {
     delay: +$('delay').value,
     format: $('format').value,
     saveAs: $('saveAs').checked,
+    editor: $('editorOn').checked,
   };
 }
 

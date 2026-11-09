@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>编辑截图</title>
+<style>
+  :root{
+    --brand:#2563eb; --brand-dark:#1d4ed8; --brand-weak:#eff4ff;
+    --ink:#111827; --ink2:#6b7280; --ink3:#9ca3af;
+    --line:#e5e7eb; --bg:#f3f4f6; --panel:#fff;
+    --ok:#059669; --err:#dc2626;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; overflow:hidden; }
+  body{
+    font:13px/1.5 -apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",sans-serif;
+    color:var(--ink); background:var(--bg); -webkit-font-smoothing:antialiased;
+    display:flex; flex-direction:column;
+  }
+
+  /* ── 顶栏 ── */
+  #top{
+    flex:none; height:48px; display:flex; align-items:center; gap:10px;
+    padding:0 14px; background:var(--panel); border-bottom:1px solid var(--line);
+  }
+  #top .name{ font-size:13px; font-weight:650; letter-spacing:-.01em; }
+  #top .dim{ font-size:11px; color:var(--ink3); font-variant-numeric:tabular-nums; }
+  #top .sp{ flex:1; }
+  .tbtn{
+    height:30px; padding:0 13px; border:1.5px solid var(--line); border-radius:7px;
+    background:#fff; color:var(--ink); font:inherit; font-size:12px; font-weight:550;
+    cursor:pointer; transition:.15s;
+  }
+  .tbtn:hover{ border-color:#cbd5e1; background:var(--soft); }
+  .tbtn.pri{
+    background:var(--brand); border-color:var(--brand); color:#fff;
+  }
+  .tbtn.pri:hover{ background:var(--brand-dark); border-color:var(--brand-dark); }
+  .tbtn:disabled{ opacity:.45; cursor:default; }
+
+  /* ── 主体：左工具 + 画布 ── */
+  #main{ flex:1; display:flex; min-height:0; }
+
+  #tools{
+    flex:none; width:56px; padding:10px 0; background:var(--panel);
+    border-right:1px solid var(--line); display:flex; flex-direction:column;
+    align-items:center; gap:4px; overflow-y:auto;
+  }
+  .tool{
+    width:40px; height:40px; border-radius:9px; border:0; background:transparent;
+    display:flex; align-items:center; justify-content:center; cursor:pointer;
+    color:var(--ink2); transition:.14s; position:relative;
+  }
+  .tool svg{ width:19px; height:19px; }
+  .tool:hover{ background:var(--bg); color:var(--ink); }
+  .tool.on{ background:var(--brand-weak); color:var(--brand); }
+  .tool.on::before{
+    content:''; position:absolute; left:-10px; top:50%; transform:translateY(-50%);
+    width:3px; height:18px; border-radius:0 2px 2px 0; background:var(--brand);
+  }
+  .tsep{ width:26px; height:1px; background:var(--line); margin:6px 0; flex:none; }
+
+  /* 颜色/粗细（框选类工具时出现） */
+  #opts{
+    flex:none; width:56px; padding:0 0 10px; display:none;
+    flex-direction:column; align-items:center; gap:7px;
+  }
+  #opts.show{ display:flex; }
+  .sw{
+    width:22px; height:22px; border-radius:50%; border:2px solid #fff; cursor:pointer;
+    box-shadow:0 0 0 1px var(--line); transition:transform .12s;
+  }
+  .sw:hover{ transform:scale(1.1); }
+  .sw.on{ box-shadow:0 0 0 2px var(--brand); }
+  .wide{ display:flex; flex-direction:column; gap:4px; align-items:center; }
+  .wd{ width:20px; height:20px; border-radius:5px; border:1.5px solid var(--line);
+       background:#fff; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+  .wd.on{ border-color:var(--brand); background:var(--brand-weak); }
+  .wd i{ display:block; background:var(--ink2); border-radius:2px; }
+
+  #stage{
+    flex:1; position:relative; overflow:auto; min-width:0;
+    background:
+      linear-gradient(45deg,#eceff3 25%,transparent 25%),
+      linear-gradient(-45deg,#eceff3 25%,transparent 25%),
+      linear-gradient(45deg,transparent 75%,#eceff3 75%),
+      linear-gradient(-45deg,transparent 75%,#eceff3 75%);
+    background-size:16px 16px;
+    background-position:0 0,0 8px,8px -8px,-8px 0;
+    display:flex; align-items:flex-start; justify-content:center; padding:20px;
+  }
+  #wrap{ position:relative; line-height:0; box-shadow:0 2px 18px rgba(0,0,0,.14); }
+  #cv{ display:block; max-width:100%; height:auto; cursor:crosshair; }
+  #wrap.cursor-default #cv{ cursor:default; }
+  #wrap.cursor-move #cv{ cursor:move; }
+
+  /* 裁剪遮罩 */
+  #cropMask{ position:absolute; inset:0; display:none; pointer-events:none; }
+  #cropMask.on{ display:block; }
+  #cropMask .sh{ position:absolute; background:rgba(17,24,39,.55); }
+  #cropMask .box{
+    position:absolute; border:1.5px solid #fff; box-shadow:0 0 0 1px rgba(0,0,0,.35);
+    cursor:move;
+  }
+  #cropMask .box::after{
+    content:''; position:absolute; inset:-4px; border:0;
+  }
+  #cropMask .hd{
+    position:absolute; width:9px; height:9px; background:#fff; border-radius:2px;
+    box-shadow:0 0 0 1px rgba(0,0,0,.3);
+  }
+
+  /* 底部状态 */
+  #bot{
+    flex:none; height:30px; display:flex; align-items:center; gap:14px;
+    padding:0 14px; background:var(--panel); border-top:1px solid var(--line);
+    font-size:11px; color:var(--ink3); font-variant-numeric:tabular-nums;
+  }
+  #bot .sp{ flex:1; }
+  #msg{ color:var(--brand); }
+
+  /* 导出菜单 */
+  #menu{
+    position:fixed; right:14px; top:52px; z-index:50; display:none;
+    min-width:172px; padding:5px; background:#fff; border:1px solid var(--line);
+    border-radius:10px; box-shadow:0 8px 28px rgba(0,0,0,.16);
+  }
+  #menu.on{ display:block; }
+  #menu button{
+    display:flex; width:100%; align-items:center; gap:9px; padding:8px 10px;
+    border:0; border-radius:7px; background:transparent; font:inherit; font-size:12px;
+    color:var(--ink); cursor:pointer; text-align:left;
+  }
+  #menu button:hover{ background:var(--bg); }
+  #menu .k{ margin-left:auto; color:var(--ink3); font-size:10.5px; }
+  #menu .hr{ height:1px; background:var(--line); margin:4px 2px; }
+</style>
+</head>
+<body>
+  <div id="top">
+    <span class="name">编辑截图</span>
+    <span class="dim" id="dim"></span>
+    <span class="sp"></span>
+    <button class="tbtn" id="undo" title="撤销 (⌘Z)">撤销</button>
+    <button class="tbtn" id="redo" title="重做 (⇧⌘Z)">重做</button>
+    <button class="tbtn" id="reset" title="还原到原始截图">原图</button>
+    <button class="tbtn pri" id="expBtn">导出 ▾</button>
+  </div>
+
+  <div id="main">
+    <div id="tools">
+      <button class="tool on" data-t="select" title="选择 / 移动 (V)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m4 3 7 17 2.5-6.5L20 11z"/></svg>
+      </button>
+      <button class="tool" data-t="crop" title="裁剪 (C)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2v16h16M2 6h16v16"/></svg>
+      </button>
+      <div class="tsep"></div>
+      <button class="tool" data-t="rect" title="矩形框 (R)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/></svg>
+      </button>
+      <button class="tool" data-t="arrow" title="箭头 (A)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 20 4"/><path d="M13 4h7v7"/></svg>
+      </button>
+      <button class="tool" data-t="text" title="文字 (T)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6V4h14v2M12 4v16M9 20h6"/></svg>
+      </button>
+      <button class="tool" data-t="mosaic" title="马赛克 (M)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6" height="6"/><rect x="14.5" y="3.5" width="6" height="6"/><rect x="3.5" y="14.5" width="6" height="6"/><rect x="14.5" y="14.5" width="6" height="6"/></svg>
+      </button>
+      <button class="tool" data-t="blur" title="模糊 (B)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.2"/></svg>
+      </button>
+    </div>
+
+    <div id="opts">
+      <div class="wide" id="colors"></div>
+      <div class="tsep"></div>
+      <div class="wide" id="widths"></div>
+      <div class="tsep"></div>
+      <button class="tool" id="fillToggle" title="填充 / 描边">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" fill="currentColor" fill-opacity=".28"/></svg>
+      </button>
+    </div>
+
+    <div id="stage">
+      <div id="wrap">
+        <canvas id="cv"></canvas>
+        <div id="cropMask">
+          <div class="sh" id="shT"></div>
+          <div class="sh" id="shB"></div>
+          <div class="sh" id="shL"></div>
+          <div class="sh" id="shR"></div>
+          <div class="box" id="cropBox">
+            <div class="hd" data-h="nw" style="left:-5px;top:-5px;cursor:nwse-resize"></div>
+            <div class="hd" data-h="ne" style="right:-5px;top:-5px;cursor:nesw-resize"></div>
+            <div class="hd" data-h="sw" style="left:-5px;bottom:-5px;cursor:nesw-resize"></div>
+            <div class="hd" data-h="se" style="right:-5px;bottom:-5px;cursor:nwse-resize"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="bot">
+    <span id="posX">—</span>
+    <span class="sp"></span>
+    <span id="msg"></span>
+    <span id="zoomNote">滚轮缩放 · 空格拖动</span>
+  </div>
+
+  <div id="menu">
+    <button data-act="download">下载图片<span class="k">⌘S</span></button>
+    <button data-act="copy">复制到剪贴板<span class="k">⌘C</span></button>
+    <div class="hr"></div>
+    <button data-act="downloadAs">导出为…（选位置）</button>
+    <button data-act="close">关闭，不要了</button>
+  </div>
+
+  <script src="store.js"></script>
+  <script src="editor.js"></script>
+</body>
+</html>

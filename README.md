@@ -14,6 +14,10 @@
 |---|---|---|
 | ![选择窗口](docs/screenshots/popup.png) | ![进行中](docs/screenshots/progress-ok.png) | ![失败](docs/screenshots/progress-fail.png) |
 
+编辑器：
+
+![编辑器](docs/screenshots/editor.png)
+
 ---
 
 ## 特性
@@ -24,6 +28,7 @@
 | **无边框接缝** | 自动排除容器 `border`，四边各内缩 1 CSS 像素，拼接处不留蓝边/横线 |
 | **重复元素只出现一次** | `position: sticky` / `fixed` 元素（如黄色标题栏、顶部导航）只在长图顶部出现一次，不再每帧重复 |
 | **秒级出图** | 采集逻辑跑在独立扩展页而非 service worker，截图撞配额只 `sleep(50)` 重试；10 帧约 4~5 秒 |
+| **内置编辑器** | 截完直接进编辑器：裁剪、矩形框、箭头、文字、马赛克、模糊，可撤销重做 |
 | **格式可选** | PNG（无损）或 JPG（质量 92%，体积小） |
 | **实时进度** | 独立进度小窗显示「第 N/M 帧 → 正在导出 → ✅ 已保存」，不污染截图内容 |
 | **零依赖** | 纯原生 JS + Canvas，无任何第三方库 |
@@ -49,14 +54,15 @@
 
 1. 打开要截的网页。
 2. 点扩展图标 → 点 **🖥️ 全屏长截图**。
-3. 弹出进度小窗，几秒后自动下载 `全屏长图-YYYYMMDD-HHMMSS.png`。
+3. 弹出进度小窗，几秒后自动打开**编辑器**（可在 popup 里关掉「截完先编辑」直接下载）。
+4. 在编辑器里裁剪 / 标注，点「导出」→ 下载。
 
 ### 区域截图
 
 1. 打开包含可滚动小窗口的网页。
 2. 点扩展图标 → 点 **🔲 区域截图**。
 3. 鼠标在页面上移动，可滚动区域会蓝色高亮并显示尺寸（`可滚 XXXXpx`）。
-4. **点一下**那个小窗口即开始采集，下载 `区域截图-YYYYMMDD-HHMMSS.png`。
+4. **点一下**那个小窗口即开始采集，随后自动打开编辑器。
 5. 按 `Esc` 取消框选。
 
 ### 参数
@@ -139,7 +145,9 @@ await chrome.downloads.download({ url, filename, conflictAction: 'uniquify', sav
 │   ├── manifest.json     MV3 清单
 │   ├── background.js     service worker：只做消息路由 + 开采集窗口
 │   ├── content.js        框选器 + 滚动执行 + sticky 处理 + 页面恢复
-│   ├── capture.html/js   采集工作页：滚动 / 截图 / 拼接 / 导出
+│   ├── capture.html/js   采集工作页：滚动 / 截图 / 拼接
+│   ├── editor.html/js    编辑器：裁剪 + 标注 + 导出
+│   ├── store.js          IndexedDB 图片暂存（采集页→编辑器交接）
 │   ├── popup.html/js     「全屏 / 区域」选择窗口 + 参数
 │   └── icon.png
 ├── test-page.html        ← 验收页：大页面里嵌一个 60 行可滚动小窗口
@@ -171,6 +179,13 @@ cd area-scroll-capture && python3 -m http.server 8765
 ---
 
 ## 更新日志
+
+### v2.5.0
+- **新增内置编辑器**：裁剪、矩形框、箭头、文字、马赛克、模糊，撤销/重做/还原
+- 截图完成后自动交接给编辑器（IndexedDB 暂存 Blob，避免 base64 撑爆 storage 配额）
+- 编辑器支持滚轮缩放、快捷键（V/C/R/A/T/M/B、⌘Z、⌘S、⌘C）
+- 导出支持下载 / 复制到剪贴板 / 指定保存位置
+- popup 新增「截完先编辑」开关，关掉则退回直接下载
 
 ### v2.4.0
 - 界面重做：选择窗口改为卡片式布局、内联 SVG 图标、滑杆带填充进度、统一设计变量

@@ -19,11 +19,38 @@ function openCapture(tabId, mode, opts) {
     delay: String(Number.isFinite(o.delay) ? o.delay : 120),
     format: o.format === 'jpeg' ? 'jpeg' : 'png',
     saveAs: o.saveAs ? '1' : '0',
+    editor: o.editor === false ? '0' : '1',
   });
   return chrome.windows.create({
     url: chrome.runtime.getURL('capture.html?' + qs.toString()),
     type: 'popup', width: 380, height: 200, left: 40, top: 40, focused: true,
   });
+}
+
+// 打开编辑器：必须是普通窗口（占满屏），不能塞进 380×200 的采集小窗
+async function openEditor(key, opts) {
+  const o = opts || {};
+  const qs = new URLSearchParams({
+    key: String(key),
+    format: o.format === 'jpeg' ? 'jpeg' : 'png',
+    saveAs: o.saveAs ? '1' : '0',
+  });
+  const url = chrome.runtime.getURL('editor.html?' + qs.toString());
+
+  // 找一个够大的窗口；拿不到就用 1280×860
+  let win = null;
+  try {
+    const last = await chrome.windows.getLastFocused({ populate: false });
+    if (last && last.width >= 900) win = last;
+  } catch (_) {}
+  let left, top, width = 1280, height = 860;
+  if (win) {
+    width = Math.max(1000, Math.min(win.width - 40, 1600));
+    height = Math.max(680, Math.min(win.height - 80, 1100));
+    left = Math.round(win.left + (win.width - width) / 2);
+    top = Math.round(win.top + (win.height - height) / 2);
+  }
+  return chrome.windows.create({ url, type: 'popup', width, height, left, top, focused: true });
 }
 
 /* ---------------- 消息入口 ---------------- */
@@ -62,6 +89,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         .then(() => sendResponse({ ok: true }))
         .catch(e => sendResponse({ ok: false, error: String(e && e.message || e) }));
     });
+    return true;
+  }
+
+  // 采集完成 → 打开编辑器（由 SW 开窗口，尺寸才受控）
+  if (msg && msg.type === 'ASC_EDIT') {
+    if (!msg.key) { sendResponse({ ok: false, error: '缺少图片 key' }); return; }
+    openEditor(msg.key, msg.options)
+      .then(() => sendResponse({ ok: true }))
+      .catch(e => sendResponse({ ok: false, error: String(e && e.message || e) }));
     return true;
   }
 
