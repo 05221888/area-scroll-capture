@@ -107,11 +107,10 @@ async function captureOnce(windowId) {
     const stride = Math.max(1, Math.floor(Math.min(info.clientHeight, viewH) - OVERLAP));
 
     // ★ 截取范围：默认整页；给了 from/to 就只截这一段（区域模式恒为整段）
+    // ★ 两种模式都支持范围（区域模式作用于小窗口内部）
     let startTop = 0, endTop = pageMax;
-    if (MODE === 'full') {
-      if (Number.isFinite(FROM)) startTop = Math.max(0, Math.min(FROM, pageMax));
-      if (Number.isFinite(TO))   endTop   = Math.max(startTop, Math.min(TO, pageMax));
-    }
+    if (Number.isFinite(FROM)) startTop = Math.max(0, Math.min(FROM, pageMax));
+    if (Number.isFinite(TO))   endTop   = Math.max(startTop, Math.min(TO, pageMax));
     // 起始位置对齐到 stride 网格，保证拼接口径一致
     startTop = Math.max(0, Math.floor(startTop / stride) * stride);
     const maxScroll = endTop;

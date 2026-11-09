@@ -178,17 +178,17 @@
 
     <!-- 全屏截取范围 -->
     <div id="rangeBox" class="range hidden">
-      <div class="setlab"><span>截取范围</span><span class="hint" id="rangeHint">整页</span></div>
+      <div class="setlab"><span id="rangeTitle">截取范围</span><span class="hint" id="rangeHint">整页</span></div>
       <div class="rangeRow">
-        <label class="radio"><input type="radio" name="rng" value="all" checked> 整页</label>
-        <label class="radio"><input type="radio" name="rng" value="view"> 从当前可见处</label>
+        <label class="radio"><input type="radio" name="rng" value="all" checked> <span id="labAll">整页</span></label>
+        <label class="radio"><input type="radio" name="rng" value="view"> <span id="labView">从当前可见处</span></label>
       </div>
       <div class="rangeRow">
         <label class="radio"><input type="radio" name="rng" value="custom"> 自定义</label>
         <span class="custom hidden" id="customWrap">
           从 <input id="fromY" type="number" min="0" step="1" placeholder="0"> px
           到 <input id="toY" type="number" min="0" step="1" placeholder="末"> px
-          <button id="fillPos" class="mini" title="用页面当前滚动位置填入「从」">取当前</button>
+          <button id="fillPos" class="mini" title="用当前位置填入「从」">取当前</button>
         </span>
       </div>
     </div>

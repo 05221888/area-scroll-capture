@@ -22,11 +22,9 @@ function openCapture(tabId, mode, opts) {
     editor: o.editor === false ? '0' : '1',
     copy: o.copy ? '1' : '0',
   });
-  // 截取范围（仅全屏模式有效）
-  if (mode === 'full') {
-    if (Number.isFinite(o.from)) qs.set('from', String(o.from));
-    if (Number.isFinite(o.to)) qs.set('to', String(o.to));
-  }
+  // 截取范围：两种模式都支持（区域模式作用于小窗口内部）
+  if (Number.isFinite(o.from)) qs.set('from', String(o.from));
+  if (Number.isFinite(o.to)) qs.set('to', String(o.to));
   // focused:false —— 采集期间要让目标窗口保持前台（后台窗口不重绘，截图会拿到旧帧）
   return chrome.windows.create({
     url: chrome.runtime.getURL('capture.html?' + qs.toString()),
@@ -70,7 +68,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     S.picked = { ...msg.info, tabId, mode: 'region' };
     chrome.storage.session.set({ ascPicked: S.picked }).catch(() => {});
     if (msg.auto !== false && tabId) {
-      openCapture(tabId, 'region', msg.options).catch(e => {
+      // ★ content 只传了范围（from/to），编辑器/复制/格式等设置要从会话里补上
+      chrome.storage.session.get('ascOptions').then(st => {
+        const merged = { ...(st.ascOptions || {}), ...(msg.options || {}) };
+        return openCapture(tabId, 'region', merged);
+      }).catch(e => {
         chrome.storage.session.set({ ascLastResult: { ok: false, error: String(e && e.message || e), ts: Date.now() } }).catch(() => {});
       });
     }
@@ -79,6 +81,13 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   }
 
   // 全屏长截图
+  // popup 在开始区域框选前会把当前设置存进来，供框选完成后使用
+  if (msg && msg.type === 'ASC_SAVE_OPTIONS') {
+    chrome.storage.session.set({ ascOptions: msg.options || {} }).catch(() => {});
+    sendResponse({ ok: true });
+    return;
+  }
+
   if (msg && msg.type === 'ASC_FULL_START') {
     const tabId = msg.tabId;
     if (!tabId) { sendResponse({ ok: false, error: '找不到目标标签页' }); return; }

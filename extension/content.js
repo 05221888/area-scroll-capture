@@ -9,7 +9,9 @@
   const ID = '__ASC_OVERLAY__';
   const LABEL = '__ASC_LABEL__';
   const HUD = '__ASC_HUD__';
-  let pickerOn = false, hoverElt = null, chosen = null;
+  let pickerOn = false;
+  let hoverElt = null, chosen = null;
+  let pickRange = null;   // 框选时带过来的范围选择 {mode:'all'|'view'|'custom', from?, to?}
   let saved = null;       // 区域采集前的页面状态
   let fullSaved = null;   // 全屏采集前的文档滚动状态
   let savedSpec = null;   // 目标元素的稳定定位信息（chosen 丢失时用于恢复）
@@ -164,7 +166,29 @@
     // ★ 不在页面上留常驻 HUD：它会被 captureVisibleTab 截进每一帧。
     //   可见反馈改由扩展图标 badge（background 里 setBadgeText）+ 完成时的 ASC_DONE 提示承担。
     const label = describe(hoverElt);
-    chrome.runtime.sendMessage({ type: 'ASC_PICKED', info: label, auto: true });
+
+    // ★ 把范围选择转成实际 px（区域模式的 from/to 是「小窗口内部」的偏移）
+    let opts = null;
+    if (!pickRange) {
+      // 多实例兜底：从 DOM 属性读
+      try {
+        const raw = document.documentElement.getAttribute('data-asc-range');
+        if (raw) pickRange = JSON.parse(raw);
+      } catch (_) {}
+    }
+    if (pickRange) {
+      opts = {};
+      const maxT = Math.max(0, chosen.scrollHeight - chosen.clientHeight);
+      if (pickRange.mode === 'view') {
+        opts.from = Math.min(Math.max(0, chosen.scrollTop), maxT);
+      } else if (pickRange.mode === 'custom') {
+        if (Number.isFinite(pickRange.from)) opts.from = Math.max(0, Math.min(pickRange.from, maxT));
+        if (Number.isFinite(pickRange.to)) opts.to = Math.max(0, Math.min(pickRange.to, maxT));
+      }
+      pickRange = null;
+      try { document.documentElement.removeAttribute('data-asc-range'); } catch (_) {}
+    }
+    chrome.runtime.sendMessage({ type: 'ASC_PICKED', info: label, auto: true, options: opts });
   }
 
   function onKey(e) {
@@ -289,6 +313,12 @@
     }
 
     if (msg.type === 'ASC_BEGIN_PICK') {
+      pickRange = msg.range || null;
+      // ★ 页面存在多份 content 实例时局部变量不共享，同步一份到 DOM 上
+      try {
+        if (msg.range) document.documentElement.setAttribute('data-asc-range', JSON.stringify(msg.range));
+        else document.documentElement.removeAttribute('data-asc-range');
+      } catch (_) {}
       startPicker();
       sendResponse({ ok: true });
       return;
@@ -392,6 +422,27 @@
         fullSaved = null;
       }
       sendResponse({ ok: true });
+      return;
+    }
+
+    // ★ 读取小窗口当前滚动位置（区域模式的「从当前可见处」用）
+    if (msg.type === 'ASC_POS_REGION') {
+      let el = chosen;
+      if (!el || !el.isConnected) {
+        if (savedSpec) el = document.querySelector(savedSpec.sel || savedSpec.cls || 'body');
+      }
+      if (!el || !el.isConnected) { sendResponse({ ok: false, error: '还没有框选小窗口' }); return; }
+      const r = el.getBoundingClientRect();
+      const bl = el.clientLeft || 0, bt = el.clientTop || 0;
+      sendResponse({
+        ok: true,
+        scrollTop: Math.round(el.scrollTop),
+        scrollLeft: Math.round(el.scrollLeft),
+        scrollHeight: el.scrollHeight,
+        clientHeight: el.clientHeight,
+        maxTop: Math.max(0, el.scrollHeight - el.clientHeight),
+        rect: { left: r.left + bl, top: r.top + bt, width: el.clientWidth, height: el.clientHeight },
+      });
       return;
     }
 
