@@ -7,6 +7,7 @@ const q = new URLSearchParams(location.search);
 const KEY = q.get('key');
 const FMT = q.get('format') === 'jpeg' ? 'jpeg' : 'png';
 const SAVE_AS = q.get('saveAs') === '1';
+const AUTO_COPY = q.get('copy') === '1';   // 进编辑器时自动复制到剪贴板
 
 const cv = $('cv');
 const ctx = cv.getContext('2d');
@@ -49,7 +50,29 @@ let zoom = 1;
   fitView();
   render();
   msg('');
+
+  // ★ 自动复制到剪贴板：必须在窗口拿到焦点之后才允许写，
+  //   编辑器刚打开时可能还没焦点，所以先等一下再试，失败静默。
+  if (AUTO_COPY) autoCopy();
 })();
+
+async function autoCopy(tries) {
+  const n = tries == null ? 6 : tries;
+  try {
+    const out = compose();
+    const blob = await new Promise(res => out.toBlob(res, 'image/png'));
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    msg('已复制到剪贴板');
+    return true;
+  } catch (e) {
+    if (n > 0) {
+      await new Promise(r => setTimeout(r, 260));
+      return autoCopy(n - 1);
+    }
+    msg('自动复制失败（可点「复制到剪贴板」重试）');
+    return false;
+  }
+}
 
 function loadImg(src) {
   return new Promise((res, rej) => {

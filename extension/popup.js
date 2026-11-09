@@ -3,15 +3,58 @@
 const $ = id => document.getElementById(id);
 const show = (id, on) => $(id).classList.toggle('hidden', !on);
 
+function rangeMode() {
+  const r = document.querySelector('input[name=rng]:checked');
+  return r ? r.value : 'all';
+}
+
 function opts() {
-  return {
+  const o = {
     overlap: +$('overlap').value,
     delay: +$('delay').value,
     format: $('format').value,
     saveAs: $('saveAs').checked,
     editor: $('editorOn').checked,
+    copy: $('copyClip').checked,
   };
+  // 截取范围：只有自定义模式才传 from/to
+  if (rangeMode() === 'custom') {
+    const f = $('fromY').value.trim(), t = $('toY').value.trim();
+    if (f !== '') o.from = Math.max(0, +f);
+    if (t !== '') o.to = Math.max(0, +t);
+  }
+  return o;
 }
+
+/* ---------- 截取范围 UI ---------- */
+function refreshRange() {
+  const m = rangeMode();
+  $('customWrap').classList.toggle('hidden', m !== 'custom');
+  const hint = m === 'all' ? '整页' : (m === 'view' ? '从当前位置到底' : '自定义区间');
+  $('rangeHint').textContent = hint;
+  // 只在全屏模式显示
+  const full = !$('choose').classList.contains('hidden');
+  $('rangeBox').classList.toggle('hidden', !full);
+}
+document.querySelectorAll('input[name=rng]').forEach(r => {
+  r.onchange = refreshRange;
+});
+
+// 「取当前」：读目标页当前滚动位置填入起始
+$('fillPos').onclick = async () => {
+  try {
+    const tab = await targetTab();
+    if (!tab) { showResult({ ok: false, error: '找不到可截图的网页标签' }); return; }
+    await ensureContent(tab.id);
+    const r = await chrome.tabs.sendMessage(tab.id, { type: 'ASC_POS_FULL' });
+    if (!r || !r.ok) throw new Error('页面没响应');
+    $('fromY').value = r.scrollY;
+    $('toY').placeholder = String(r.maxTop);
+  } catch (e) {
+    showResult({ ok: false, error: '取当前位置失败：' + (e && e.message || e) });
+  }
+};
+refreshRange();
 
 /** 给 range 画「已填充」渐变（Chrome 不自动填） */
 function paintRange(el) {
@@ -60,7 +103,18 @@ $('cardFull').onclick = async () => {
     const tab = await targetTab();
     if (!tab) { showResult({ ok: false, error: '找不到可截图的网页标签' }); return; }
     await ensureContent(tab.id);
-    await chrome.runtime.sendMessage({ type: 'ASC_FULL_START', tabId: tab.id, options: opts() });
+    const o = opts();
+    // ★ 「从当前可见处」：现读一次滚动位置作为起点，终点留空（到底）
+    if (rangeMode() === 'view') {
+      const pos = await chrome.tabs.sendMessage(tab.id, { type: 'ASC_POS_FULL' });
+      if (!pos || !pos.ok) throw new Error('页面没响应位置查询');
+      o.from = pos.scrollY;
+      // 已经在最底部就没得截了
+      if (pos.maxTop - pos.scrollY < 40) {
+        throw new Error('已经在页面最底部，没有可截内容');
+      }
+    }
+    await chrome.runtime.sendMessage({ type: 'ASC_FULL_START', tabId: tab.id, options: o });
     window.close();
   } catch (e) {
     showResult({ ok: false, error: '启动全屏截图失败：' + (e && e.message || e) });
@@ -81,6 +135,7 @@ $('cardRegion').onclick = async () => {
     }
     show('choose', false);
     show('stepPick', true);
+    refreshRange();
     setTimeout(() => window.close(), 900);
   } catch (e) {
     showResult({ ok: false, error: '启动框选失败：' + (e && e.message || e) });

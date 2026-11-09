@@ -117,6 +117,24 @@
     font-size:10.5px; color:var(--ink3); line-height:1.5;
   }
   .hidden{ display:none !important; }
+
+  /* ── 截取范围 ── */
+  .range{ margin-top:12px; padding-top:12px; border-top:1px solid var(--line); }
+  .rangeRow{ display:flex; align-items:center; gap:14px; margin:7px 0; font-size:12px; }
+  .radio{ display:flex; align-items:center; gap:5px; color:var(--ink2); cursor:pointer; font-size:11.5px; }
+  .radio input{ margin:0; accent-color:var(--brand); }
+  .setlab .hint{ color:var(--brand); font-weight:600; text-transform:none; letter-spacing:0; }
+  .custom{ display:flex; align-items:center; gap:5px; font-size:11px; color:var(--ink2); }
+  .custom input{
+    width:58px; padding:4px 6px; border:1.5px solid var(--line); border-radius:6px;
+    font:inherit; font-size:11px; color:var(--ink); outline:none;
+  }
+  .custom input:focus{ border-color:var(--brand); }
+  .mini{
+    padding:3px 7px; border:1.5px solid var(--line); border-radius:6px; background:#fff;
+    font:inherit; font-size:10.5px; color:var(--ink2); cursor:pointer;
+  }
+  .mini:hover{ border-color:var(--brand); color:var(--brand); }
 </style>
 </head>
 <body>
@@ -158,6 +176,23 @@
     <div id="stepPick" class="tip hidden">去页面点一下要截的小窗口，按 <b>Esc</b> 取消</div>
     <div id="info" class="info"></div>
 
+    <!-- 全屏截取范围 -->
+    <div id="rangeBox" class="range hidden">
+      <div class="setlab"><span>截取范围</span><span class="hint" id="rangeHint">整页</span></div>
+      <div class="rangeRow">
+        <label class="radio"><input type="radio" name="rng" value="all" checked> 整页</label>
+        <label class="radio"><input type="radio" name="rng" value="view"> 从当前可见处</label>
+      </div>
+      <div class="rangeRow">
+        <label class="radio"><input type="radio" name="rng" value="custom"> 自定义</label>
+        <span class="custom hidden" id="customWrap">
+          从 <input id="fromY" type="number" min="0" step="1" placeholder="0"> px
+          到 <input id="toY" type="number" min="0" step="1" placeholder="末"> px
+          <button id="fillPos" class="mini" title="用页面当前滚动位置填入「从」">取当前</button>
+        </span>
+      </div>
+    </div>
+
     <div class="sep"></div>
     <div class="setlab"><span>参数</span></div>
 
@@ -180,6 +215,9 @@
     </div>
     <div class="row chk">
       <label><input id="editorOn" type="checkbox" checked> 截完先编辑（裁剪 / 标注）</label>
+    </div>
+    <div class="row chk">
+      <label><input id="copyClip" type="checkbox"> 截完自动复制到剪贴板</label>
     </div>
     <div class="row chk">
       <label><input id="saveAs" type="checkbox"> 每次询问保存位置</label>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>长页面 · 范围截取验收</title>
+<style>
+  body{margin:0;font:16px/1.8 -apple-system,"PingFang SC",sans-serif;background:#fff;color:#111827}
+  .hd{position:sticky;top:0;background:#fff8e1;border-bottom:2px solid #f0c000;padding:12px 20px;font-weight:700;z-index:5}
+  .row{padding:26px 20px;border-bottom:1px solid #e5e7eb}
+  .row:nth-child(even){background:#f9fafb}
+  .n{display:inline-block;width:52px;height:52px;line-height:52px;border-radius:50%;
+     background:#2563eb;color:#fff;text-align:center;font-weight:700;font-size:18px;margin-right:16px;vertical-align:middle}
+  .t{display:inline-block;vertical-align:middle}
+  .k{color:#6b7280;font-size:14px}
+</style></head>
+<body>
+<div class="hd">长页面标题（sticky）· 50 段内容，每段约 110px</div>
+<div id="rows"></div>
+<script>
+  const box = document.getElementById('rows');
+  let h = '';
+  for (let i = 1; i <= 50; i++) {
+    h += `<div class="row"><span class="n">${i}</span><span class="t"><b>第 ${i} 段内容</b><br>
+      <span class="k">用于验收「从指定位置开始截」：编号 ${i} 必须出现且只出现一次</span></span></div>`;
+  }
+  box.innerHTML = h;
+  window.__DOC_H__ = document.documentElement.scrollHeight;
+</script>
+</body></html>

@@ -20,10 +20,17 @@ function openCapture(tabId, mode, opts) {
     format: o.format === 'jpeg' ? 'jpeg' : 'png',
     saveAs: o.saveAs ? '1' : '0',
     editor: o.editor === false ? '0' : '1',
+    copy: o.copy ? '1' : '0',
   });
+  // 截取范围（仅全屏模式有效）
+  if (mode === 'full') {
+    if (Number.isFinite(o.from)) qs.set('from', String(o.from));
+    if (Number.isFinite(o.to)) qs.set('to', String(o.to));
+  }
+  // focused:false —— 采集期间要让目标窗口保持前台（后台窗口不重绘，截图会拿到旧帧）
   return chrome.windows.create({
     url: chrome.runtime.getURL('capture.html?' + qs.toString()),
-    type: 'popup', width: 380, height: 200, left: 40, top: 40, focused: true,
+    type: 'popup', width: 380, height: 200, left: 40, top: 40, focused: false,
   });
 }
 
@@ -34,6 +41,7 @@ async function openEditor(key, opts) {
     key: String(key),
     format: o.format === 'jpeg' ? 'jpeg' : 'png',
     saveAs: o.saveAs ? '1' : '0',
+    copy: o.copy ? '1' : '0',
   });
   const url = chrome.runtime.getURL('editor.html?' + qs.toString());
 

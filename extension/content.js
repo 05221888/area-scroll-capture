@@ -321,6 +321,22 @@
       return;
     }
 
+    // ★ 读取当前视口位置 + 页面总高度，供「从当前可见处开始截」用
+    if (msg.type === 'ASC_POS_FULL') {
+      const de = document.documentElement, b = document.body;
+      const scrollHeight = Math.max(de.scrollHeight, b ? b.scrollHeight : 0);
+      const clientHeight = de.clientHeight || window.innerHeight;
+      sendResponse({
+        ok: true,
+        scrollY: Math.round(window.scrollY || de.scrollTop || 0),
+        scrollX: Math.round(window.scrollX || 0),
+        scrollHeight, clientHeight,
+        maxTop: Math.max(0, scrollHeight - clientHeight),
+        innerWidth: window.innerWidth, innerHeight: window.innerHeight,
+      });
+      return;
+    }
+
     if (msg.type === 'ASC_SCROLL_FULL') {
       const de = document.documentElement;
       if (!fullSaved) fullSaved = { x: 0, y: 0 };
@@ -334,8 +350,25 @@
       }
       window.scrollTo({ top: msg.top, left: 0, behavior: 'auto' });
       if (window.scrollY !== msg.top && msg.top > 0) window.scrollTo(0, msg.top);
-      const delay = Math.max(60, Math.min(2000, msg.delay || 350));
-      setTimeout(() => {
+      // ★ 等到「滚动真的生效 + 两帧渲染完成」才回报，而不是固定 sleep。
+      //   固定 sleep 在长页面上不可靠：滚动是异步的，截图可能在渲染前发生，
+      //   导致某几帧截到旧画面（表现为长图尾部内容缺失/错序）。
+      const minWait = Math.max(60, Math.min(2000, msg.delay || 350));
+      const t0 = Date.now();
+      const settle = () => {
+        // 要求：已经滚到目标位置（或已到底） + 至少过 minWait + 两帧 rAF
+        const atTarget = Math.abs(window.scrollY - msg.top) <= 2 || window.scrollY >= msg.top;
+        if (!atTarget && Date.now() - t0 < 1500) {
+          requestAnimationFrame(settle);
+          return;
+        }
+        if (Date.now() - t0 < minWait) {
+          setTimeout(settle, Math.max(16, minWait - (Date.now() - t0)));
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(report));
+      };
+      const report = () => {
         sendResponse({
           ok: true,
           actualTop: window.scrollY,
@@ -345,7 +378,8 @@
           scrollHeight: Math.max(de.scrollHeight, (document.body || de).scrollHeight),
           clientHeight: de.clientHeight || window.innerHeight,
         });
-      }, delay);
+      };
+      requestAnimationFrame(settle);
       return true;
     }
 
@@ -390,9 +424,20 @@
       //   用 scrollTo 再钉一次，并在回报前校验；否则 12 帧全停在顶部重复 1→5 行。
       try { chosen.scrollTo({ top: msg.top, left: saved.left || 0, behavior: 'auto' }); } catch (_) {}
       if (chosen.scrollTop !== msg.top && msg.top > 0) chosen.scrollTop = msg.top;
-      // 等两帧让渲染/懒加载落地，再读真实滚动位置
-      const delay = Math.max(60, Math.min(2000, msg.delay || 350));
-      setTimeout(() => {
+      // ★ 同全屏模式：等到滚动真的到位 + 双 rAF 再回报，
+      //   固定 sleep 会让截图抢在渲染前，造成拼接缺帧。
+      const minWait = Math.max(60, Math.min(2000, msg.delay || 350));
+      const t0 = Date.now();
+      const settle = () => {
+        const atTarget = Math.abs(chosen.scrollTop - msg.top) <= 2 || chosen.scrollTop >= msg.top;
+        if (!atTarget && Date.now() - t0 < 1500) { requestAnimationFrame(settle); return; }
+        if (Date.now() - t0 < minWait) {
+          setTimeout(settle, Math.max(16, minWait - (Date.now() - t0)));
+          return;
+        }
+        requestAnimationFrame(() => requestAnimationFrame(report));
+      };
+      const report = () => {
         const r = chosen.getBoundingClientRect();
         // ★ 只取「内容区」矩形，排除 border —— getBoundingClientRect 含 border，
         //   而 scrollTop 只滚动内容区；把边框裁进去会在每个拼接处重复出现一条蓝边。
@@ -411,7 +456,8 @@
           bg: getComputedStyle(chosen).backgroundColor || '#ffffff',
           scrollHeight: chosen.scrollHeight, clientHeight: chosen.clientHeight,
         });
-      }, delay);
+      };
+      requestAnimationFrame(settle);
       return true; // 异步 sendResponse
     }
 
